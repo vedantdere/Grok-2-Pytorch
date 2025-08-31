@@ -465,6 +465,8 @@ class Grok1Model(nn.Module):
             ]
         )
 
+        self.embed_tokens = nn.Embedding(config.vocab_size,config.hidden_size,self.padding_idx)
+
         self.norm = GrokRMSNorm(config.hidden_size,
                                 eps=config.rms_norm_eps)
         
@@ -474,6 +476,8 @@ class Grok1Model(nn.Module):
                 input_embeds=None):
         if input_embeds is not None:
             hidden_states = input_embeds
+        else:
+            hidden_states = self.embed_tokens(input_ids)
         
         residual, deferred_norm = None, None
 
@@ -508,7 +512,7 @@ class Grok1ModelForCausalLM(nn.Module):
 
     def forward(self,
                 input_ids,
-                positions,
+                positions=None,
                 input_embeds=None):
         
         hidden_states = self.model(input_ids, positions, input_embeds)
