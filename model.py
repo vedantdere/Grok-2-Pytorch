@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from attn_implementation import eager_paged_attention_forward
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+
 
 class GrokRMSNorm(nn.Module):
     def __init__(self,
@@ -202,7 +204,7 @@ class Grok1MoE(nn.Module):
         return topk_output
         
 
-class GptOssRotartEmbedding(nn.Module):
+class GrokRotartEmbedding(nn.Module):
     def __init__(self,
                 config,
                 device=None):
@@ -320,7 +322,7 @@ class Grok1Attention(nn.Module):
     def forward(self,
                 hidden_states,
                 position_embeddings,
-                attention_mask,
+                attention_mask=None,
                 past_key_values=None,
                 cache_position=None,
                 **kwargs):
@@ -420,15 +422,17 @@ class Grok1DecoderLayer(nn.Module):
         residual_original = residual
 
         hidden_states = self.pre_attn_norm(hidden_states)
-        residual = self.pre_attn_norm(residual)
+        if residual:
+            residual = self.pre_attn_norm(residual)
 
-        hidden_states = self.self_attn(
-            positions=positions,
+        hidden_states, _ = self.self_attn(
+            position_embeddings=positions,
             hidden_states=hidden_states,
         )
 
         hidden_states = self.post_attn_norm(hidden_states)
-        residual = self.post_attn_norm(residual)
+        if residual:
+            residual = self.post_attn_norm(residual)
 
         return hidden_states, residual, self.post_moe_norm
 
@@ -466,7 +470,7 @@ class Grok1Model(nn.Module):
         )
 
         self.embed_tokens = nn.Embedding(config.vocab_size,config.hidden_size,self.padding_idx)
-
+        self.rotary_emb = GrokRotartEmbedding(config=config)
         self.norm = GrokRMSNorm(config.hidden_size,
                                 eps=config.rms_norm_eps)
         
@@ -479,11 +483,12 @@ class Grok1Model(nn.Module):
         else:
             hidden_states = self.embed_tokens(input_ids)
         
+        position_embeddings = self.rotary_emb(hidden_states, positions)
         residual, deferred_norm = None, None
 
         for i in range(len(self.layers)):
             hidden_states, residual, deferred_norm = self.layers[i](
-                positions,
+                position_embeddings,
                 hidden_states,
                 residual,
                 deferred_norm

@@ -81,12 +81,12 @@ class Grok2_config_small(PretrainedConfig):
     def __init__(self):
         self.embedding_multiplier_scale = 90.50966799187809
         self.output_multiplier_scale = 0.5
-        self.vocab_size = 131072
+        self.vocab_size = 10000
         self.hidden_size = 8192
         self.intermediate_size = 32768
         self.moe_intermediate_size = 16384
-        self.max_position_embeddings = 131072
-        self.context_len = 131072
+        self.max_position_embeddings = 10000
+        self.context_len = 10000
         self.num_experts_per_tok = 2
         self.num_local_experts = 8
         self.residual_moe = True
@@ -115,4 +115,13 @@ class Grok2_config_small(PretrainedConfig):
             "sliding_attention" if bool((i+1)%2) else "full_attention" for i in range(self.num_hidden_layers)
         ]
         self.sliding_window=128
-        self.pad_token_idx=131071
+        self.pad_token_idx=0
+        self.rope_scaling={
+            "rope_type":"yarn",
+            "factor":32.0,
+            "beta_fast":32.0,
+            "beta_slow":1.0,
+            "truncate":False
+        }
+
+        self.rope_theta=150000.0        
