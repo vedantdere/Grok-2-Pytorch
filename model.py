@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from attn_implementation import eager_paged_attention_forward
 
 class GrokRMSNorm(nn.Module):
     def __init__(self,
@@ -193,6 +194,195 @@ class Grok1MoE(nn.Module):
 
         self.router_logit_softcapping = config.router_logit_softcapping
 
-        self.mlp = Grok1MLP(config)
+        self.experts = GrokMLP(config)
+    
+    def forward(self,
+                hidden_states):
+        topk_output = self.experts(hidden_states)
+        return topk_output
         
+
+class GptOssRotartEmbedding(nn.Module):
+    def __init__(self,
+                config,
+                device=None):
+        super().__init__()
+
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq,self.attenstion_scaling = self.rope_init_fn(self.config,device)
+
+        self.register_buffer("inv_freq",inv_freq)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    def forward(self,x,position_ids):
+        """"
+        Apply Rotary Position Embeddings to the input tensor x based on position_ids.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, hidden_size).
+            position_ids (torch.Tensor): Position IDs of shape (batch_size, sequence_length).
+        Returns:
+            torch.Tensor: Cosine and sine embeddings for the rotary position embeddings.
+        """
+        inv_freq_expanded = self.inv_freq[None,:,None].float().expand(position_ids.shape[0],-1,1).to(x.device)
+        postion_ids_expanded = position_ids[:,None,:].float()
+
+        device_type = x.device.type if isinstance(x.device.type,str) and x.device.type != "mps" else "cpu"
+
+        with torch.autocast(device_type=device_type,enabled=False):
+            freqs = (inv_freq_expanded.float() @ postion_ids_expanded.float()).transpose(1,2)
+            emb = freqs
+            cos = emb.cos() * self.attenstion_scaling
+            sin = emb.sin() * self.attenstion_scaling
+
+        return cos.to(x.dtype),sin.to(x.dtype)
+
+
+def _apply_rotary_emb(x,
+                    cos,
+                    sin):
+    first_half,second_half = torch.chunk(x,2,dim=-1)
+    first_ = first_half * cos - second_half * sin
+    second_ = second_half * cos + first_half * sin
+    return torch.cat((first_,second_),dim=-1)
+
+
+def apply_rotart_pos_emb(q,k,cos,sin,position_ids=None,unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    q_embed = _apply_rotary_emb(q,cos,sin)
+    k_embed = _apply_rotary_emb(k,cos,sin)
+    return q_embed,k_embed
+
+
+class Grok1Attention(nn.Module):
+    def __init__(self,
+                 config,
+                 hidden_size,
+                 num_heads,
+                 num_kv_heads,
+                 layer_id,
+                 max_position,
+                 rope_theta
+                 ):
+        super().__init__()
+
+        self.config = config
+        self.layer_id = layer_id
+        
+        self.head_dim = getattr(config, "head_dim", config.hidden_size  // config.num_attention_heads)
+
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim *-0.5
+
+        self.attention_dropout = config.attention_dropout
+
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.bias
+        )
+
+        self.k_proj = nn.Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.bias
+        )
+
+        self.v_proj = nn.Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.bias
+        )        
+
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias
+        )
+
+        self.sliding_window = config.sliding_window if config.layer_types[layer_id]=="sliding_attention" else None
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+
+    def forward(self,
+                hidden_states,
+                position_embeddings,
+                attention_mask,
+                past_key_values=None,
+                cache_position=None,
+                **kwargs):
+        
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1,2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1,2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1,2)
+
+        cos, sin = position_embeddings
+
+        query_states, key_states = apply_rotart_pos_emb(query_states, key_states, cos, sin)
+
+        attention_inference = eager_paged_attention_forward
+
+        attn_output, attn_weight = attention_inference(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks
+        )
+
+        attn_output = attn_output.reshape(*input_shape,-1).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weight
+    
+
+class Grok1DecoderLayer(nn.Module):
+    def __init__(self,
+                 config,
+                 layer_id
+                 ):
+        super().__init__()
+
+        self.num_experts = config.num_local_experts
+        self.hidden_size = config.hidden_size
+        self.residual_moe = getattr(config, "residual_moe", False)
+        self.layer_id = layer_id
+
+        self.alt_stream = torch.cuda.Stream()
+
+        rope_theta = getattr(config, "rope_theta", 10000)
+
+        self.self_attn = Grok1Attention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_heads=config.num_attention_heads,
+            max_position=(
+                config.context_len,
+                if hasattr(config, "context_len")
+                else config.max_position_embeddings
+            ),
+            num_lv_hedas = config.num_key_value_heads,
+            layer_id=layer_id,
+            rope_theta=rope_theta,
+        )
 
