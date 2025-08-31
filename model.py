@@ -368,7 +368,7 @@ class Grok1DecoderLayer(nn.Module):
         self.residual_moe = getattr(config, "residual_moe", False)
         self.layer_id = layer_id
 
-        self.alt_stream = torch.cuda.Stream()
+        # self.alt_stream = torch.cuda.Stream()
 
         rope_theta = getattr(config, "rope_theta", 10000)
 
@@ -434,14 +434,14 @@ class Grok1DecoderLayer(nn.Module):
 
 
     def moe_with_rmoe(self,x):
-        current_stream = torch.cuda.current_stream()
-        self.atl_stream.wait_stream(current_stream)
+        # current_stream = torch.cuda.current_stream()
+        # self.atl_stream.wait_stream(current_stream)
 
         mlp_result = self.mlp(x)
 
-        with torch.cuda.stream(self.alt_stream):
-            moe_result = self.block_sparse_moe(x)
-        current_stream.wait_stream(self.alt_stream)
+        # with torch.cuda.stream(self.alt_stream):
+        moe_result = self.block_sparse_moe(x)
+        
         return (mlp_result + moe_result) / 1.4142135623730951
     
 
