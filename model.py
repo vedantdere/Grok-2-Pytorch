@@ -432,6 +432,7 @@ class Grok1DecoderLayer(nn.Module):
         hidden_states = self.post_attn_norm(hidden_states)
         residual = self.post_attn_norm(residual)
 
+        return hidden_states, residual, self.post_moe_norm
 
 
     def moe_with_rmoe(self,x):
@@ -444,3 +445,77 @@ class Grok1DecoderLayer(nn.Module):
             moe_result = self.block_sparse_moe(x)
         current_stream.wait_stream(self.alt_stream)
         return (mlp_result + moe_result) / 1.4142135623730951
+    
+
+class Grok1Model(nn.Module):
+    def __init__(self,
+                 config,
+                 ):
+        super().__init__()
+
+        self.config = config
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.layers = nn.Module(
+            [
+                Grok1DecoderLayer(
+                    config,
+                    i,
+                )
+                for i in range(config.num_hidden_layers)
+            ]
+        )
+
+        self.norm = GrokRMSNorm(config.hidden_size,
+                                eps=config.rms_norm_eps)
+        
+    def forward(self,
+                input_ids,
+                positions,
+                forrward_batch,
+                input_embeds=None):
+        if input_embeds is not None:
+            hidden_states = input_embeds
+        
+        residual, deferred_norm = None, None
+
+        for i in range(len(self.layers)):
+            hidden_states, residual, deferred_norm = self.layers[i](
+                positions,
+                hidden_states,
+                forrward_batch,
+                residual,
+                deferred_norm
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return hidden_states
+
+
+class Grok1ModelForCausalLM(nn.Module):
+    def __init__(self,
+                 config):
+        super().__init__()
+
+        self.config = config
+        
+        self.model = Grok1Model(
+            config=config
+        )
+
+        self.lm_head = nn.Linear(
+            config.hidden_size,
+            config.vocab_size,
+            bias=False
+        )
+
+    def forward(self,
+                input_ids,
+                positions,
+                forward_batch,
+                input_embeds=None):
+        
+        hidden_states = self.model(input_ids, positions, forward_batch, input_embeds)
+        out = self.lm_head(hidden_states)
+        return out
