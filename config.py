@@ -114,4 +114,4 @@ class Grok2_config_small(PretrainedConfig):
         self.layer_types = [
             "sliding_attention" if bool((i+1)%2) else "full_attention" for i in range(self.num_hidden_layers)
         ]
-        
+        self.sliding_window=128
