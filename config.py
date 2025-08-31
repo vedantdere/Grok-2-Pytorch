@@ -75,3 +75,35 @@ class Grok2_config(PretrainedConfig):
         self.attn_factor = 1.0
         self.beta_fast = 8
         self.beta_slow = 1
+
+
+class Grok2_config_small(PretrainedConfig):
+    def __init__(self):
+        self.embedding_multiplier_scale = 90.50966799187809
+        self.output_multiplier_scale = 0.5
+        self.vocab_size = 131072
+        self.hidden_size = 8192
+        self.intermediate_size = 32768
+        self.moe_intermediate_size = 16384
+        self.max_position_embeddings = 131072
+        self.num_experts_per_tok = 2
+        self.num_local_experts = 8
+        self.residual_moe = True
+        self.num_attention_heads = 64
+        self.num_key_value_heads = 8
+        self.num_hidden_layers = 1
+        self.head_dim = 128
+        self.rms_norm_eps = 1e-05
+        self.final_logit_softcapping = 50
+        self.attn_logit_softcapping = 30.0
+        self.router_logit_softcapping = 30.0
+        self.rope_theta = 208533496
+        self.attn_temperature_len = 1024
+        self.sliding_window_size = -1
+        self.global_attn_every_n = 1
+        self.original_max_position_embeddings = 8192
+        self.scaling_factor = 16.0
+        self.extrapolation_factor = 1.0
+        self.attn_factor = 1.0
+        self.beta_fast = 8
+        self.beta_slow = 1
