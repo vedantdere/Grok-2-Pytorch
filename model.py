@@ -377,7 +377,7 @@ class Grok1DecoderLayer(nn.Module):
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             max_position=config.context_len,
-            num_lv_hedas = config.num_key_value_heads,
+            num_kv_hedas = config.num_key_value_heads,
             layer_id=layer_id,
             rope_theta=rope_theta,
         )
