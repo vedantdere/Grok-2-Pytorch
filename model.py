@@ -376,13 +376,71 @@ class Grok1DecoderLayer(nn.Module):
             config=config,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
-            max_position=(
-                config.context_len,
-                if hasattr(config, "context_len")
-                else config.max_position_embeddings
-            ),
+            max_position=config.context_len,
             num_lv_hedas = config.num_key_value_heads,
             layer_id=layer_id,
             rope_theta=rope_theta,
         )
 
+        if self.num_experts > 0:
+            self.block_sparse_moe = Grok1MoE(
+                config=config,
+                layer_id=layer_id,
+                num_experts=config.num_local_experts,
+                top_k=config.num_experts_per_tok,
+                hidden_size=config.hidden_size,
+                intermediate_size=config.intermediate_size,
+            )
+
+            if self.residual_moe:
+                self.mlp = Grok1MLP(
+                    hidden_size=config.hidden_size,
+                    intermediate_size=config.intermediate_size,
+                    layer_id=layer_id
+                )
+
+        self.pre_attn_norm = GrokRMSNorm(config.hidden_size,eps=config.rms_norm_eps)
+        self.post_attn_norm = GrokRMSNorm(config.hidden_size,eps=config.rms_norm_eps)
+        self.pre_moe_norm = GrokRMSNorm(config.hidden_size,eps=config.rms_norm_eps)
+        self.post_moe_norm = GrokRMSNorm(config.hidden_size,eps=config.rms_norm_eps)
+
+        if self.num_experts > 0:
+            if self.residual_moe:
+                self.ffn = self.moe_with_rmoe
+            else:
+                self.ffn = self.block_sparse_moe
+
+    def forward(self,
+                positions,
+                hidden_states,
+                forward_batch,
+                residual=None,
+                deferred_norm=None):
+        
+        hidden_states_original = hidden_states
+        residual_original = residual
+
+        hidden_states = self.pre_attn_norm(hidden_states)
+        residual = self.pre_attn_norm(residual)
+
+        hidden_states = self.self_attn(
+            positions=positions,
+            hidden_states=hidden_states,
+            forward_batch=forward_batch
+        )
+
+        hidden_states = self.post_attn_norm(hidden_states)
+        residual = self.post_attn_norm(residual)
+
+
+
+    def moe_with_rmoe(self,x):
+        current_stream = torch.cuda.current_stream()
+        self.atl_stream.wait_stream(current_stream)
+
+        mlp_result = self.mlp(x)
+
+        with torch.cuda.stream(self.alt_stream):
+            moe_result = self.block_sparse_moe(x)
+        current_stream.wait_stream(self.alt_stream)
+        return (mlp_result + moe_result) / 1.4142135623730951
