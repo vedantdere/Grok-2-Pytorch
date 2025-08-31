@@ -452,7 +452,7 @@ class Grok1Model(nn.Module):
         super().__init__()
 
         self.config = config
-        self.padding_idx = config.pad_token_id
+        # self.padding_idx = config.pad_token_idx
         self.vocab_size = config.vocab_size
 
         self.layers = nn.Module(
