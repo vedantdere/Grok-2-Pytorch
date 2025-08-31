@@ -86,6 +86,7 @@ class Grok2_config_small(PretrainedConfig):
         self.intermediate_size = 32768
         self.moe_intermediate_size = 16384
         self.max_position_embeddings = 131072
+        self.context_len = 131072
         self.num_experts_per_tok = 2
         self.num_local_experts = 8
         self.residual_moe = True
