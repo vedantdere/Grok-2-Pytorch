@@ -455,7 +455,7 @@ class Grok1Model(nn.Module):
         # self.padding_idx = config.pad_token_idx
         self.vocab_size = config.vocab_size
 
-        self.layers = nn.Module(
+        self.layers = nn.ModuleList(
             [
                 Grok1DecoderLayer(
                     config,
@@ -471,7 +471,6 @@ class Grok1Model(nn.Module):
     def forward(self,
                 input_ids,
                 positions,
-                forrward_batch,
                 input_embeds=None):
         if input_embeds is not None:
             hidden_states = input_embeds
@@ -482,7 +481,6 @@ class Grok1Model(nn.Module):
             hidden_states, residual, deferred_norm = self.layers[i](
                 positions,
                 hidden_states,
-                forrward_batch,
                 residual,
                 deferred_norm
             )
