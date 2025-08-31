@@ -115,4 +115,4 @@ class Grok2_config_small(PretrainedConfig):
             "sliding_attention" if bool((i+1)%2) else "full_attention" for i in range(self.num_hidden_layers)
         ]
         self.sliding_window=128
-        self.pad_token_id=131071
+        self.padding_idx=131071
