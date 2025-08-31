@@ -413,7 +413,6 @@ class Grok1DecoderLayer(nn.Module):
     def forward(self,
                 positions,
                 hidden_states,
-                forward_batch,
                 residual=None,
                 deferred_norm=None):
         
@@ -426,7 +425,6 @@ class Grok1DecoderLayer(nn.Module):
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
-            forward_batch=forward_batch
         )
 
         hidden_states = self.post_attn_norm(hidden_states)
@@ -513,9 +511,8 @@ class Grok1ModelForCausalLM(nn.Module):
     def forward(self,
                 input_ids,
                 positions,
-                forward_batch,
                 input_embeds=None):
         
-        hidden_states = self.model(input_ids, positions, forward_batch, input_embeds)
+        hidden_states = self.model(input_ids, positions, input_embeds)
         out = self.lm_head(hidden_states)
         return out
