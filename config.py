@@ -105,6 +105,7 @@ class Grok2_config_small(PretrainedConfig):
         self.original_max_position_embeddings = 8192
         self.scaling_factor = 16.0
         self.extrapolation_factor = 1.0
+        self.attention_dropout = 0.0
         self.attn_factor = 1.0
         self.beta_fast = 8
         self.beta_slow = 1
