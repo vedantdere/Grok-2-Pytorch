@@ -110,3 +110,4 @@ class Grok2_config_small(PretrainedConfig):
         self.beta_fast = 8
         self.beta_slow = 1
         self.bias = False
+        self.attention_bias = False
