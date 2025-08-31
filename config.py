@@ -111,3 +111,7 @@ class Grok2_config_small(PretrainedConfig):
         self.beta_slow = 1
         self.bias = False
         self.attention_bias = False
+        self.layer_types = [
+            "sliding_attention" if bool((i+1)%2) else "full_attention" for i in range(self.num_hidden_layers)
+        ]
+        
