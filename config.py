@@ -45,7 +45,7 @@ class PretrainedConfig:
 
         
 
-class Grok2_config(PretrainedConfig):
+class Grok2Config(PretrainedConfig):
     def __init__(self):
         self.embedding_multiplier_scale = 90.50966799187809
         self.output_multiplier_scale = 0.5
@@ -77,7 +77,7 @@ class Grok2_config(PretrainedConfig):
         self.beta_slow = 1
 
 
-class Grok2_config_small(PretrainedConfig):
+class Grok2ConfigTiny(PretrainedConfig):
     def __init__(self):
         self.embedding_multiplier_scale = 90.50966799187809
         self.output_multiplier_scale = 0.5
