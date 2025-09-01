@@ -1,6 +1,6 @@
 # 🚀 Grok-2 – Pure PyTorch Reimplementation
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1bEl4FF2JW2TKLj_yXlWc5FO0P7fZtN9H?usp=sharing)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/15g8I1cXcC1p2wvjQst8GPlWV2bEgD4Ke?usp=sharing)
 
 
 <p align="center">
@@ -54,7 +54,7 @@ We provide two predefined model configurations:
 ```python
 import torch
 from config import Grok2ConfigTiny
-from layers import Grok1ModelForCausalLM  # your main file
+from model import Grok1ModelForCausalLM  # your main file
 
 # 1. Load Config
 config = Grok2ConfigTiny()
